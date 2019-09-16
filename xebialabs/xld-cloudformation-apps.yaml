@@ -1,0 +1,132 @@
+apiVersion: xl-deploy/v1
+kind: Applications
+spec:
+- name: wyndham
+  type: core.Directory
+  children:
+
+  - name: EKS-LAMBDA
+    type: core.Directory
+    children:
+    # create S3 bucket
+    - name: wyndham-lambda-bucket
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: s3-bucket-wyndham-lambda
+          type: aws.s3.BucketSpec
+          bucketName: wyndham-lambda
+          region: us-east-2
+    # upload the artifacts to S3 bucket
+    - name: wyndham-lambda-artifacts
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-lambda-artifacts
+          type: aws.s3.File
+          file: !file ../cloudformation/cfn-secret-provider.zip
+          acl: bucket-owner-full-control
+          scanPlaceholders: false
+  # Provision EKS cluster using Cloudformation templates
+  - name: EKS-CLOUDFORMATION
+    type: core.Directory
+    children:
+    - name: wyndham-cloudformation-eks-user
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-eks-user
+          type: aws.cloudformation.Template
+          file: !file ../cloudformation/eks-user.yaml
+          capabilities:
+          - CAPABILITY_IAM
+          - CAPABILITY_NAMED_IAM
+          inputVariables:
+            ProjectName: wyndham
+            UserStackName: wyndham-eks-user
+            S3BucketPrefix: wyndham-lambda
+    - name: wyndham-cloudformation-eks-vpc
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-eks-vpc
+          type: aws.cloudformation.Template
+          file: !file ../cloudformation/eks-vpc.yaml
+          capabilities:
+          - CAPABILITY_IAM
+          - CAPABILITY_NAMED_IAM
+          inputVariables:
+            ProjectName: wyndham
+            VPCStackName: wyndham-eks-vpc
+            AvailabilityZones: us-east-2a, us-east-2b
+    - name: wyndham-cloudformation-eks-master
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-eks-master
+          type: aws.cloudformation.Template
+          file: !file ../cloudformation/eks-master.yaml
+          capabilities:
+          - CAPABILITY_IAM
+          - CAPABILITY_NAMED_IAM
+          environmentPath: aws-eks-wyndham
+          inputVariables:
+            ProjectName: wyndham
+            VPCStackName: wyndham-eks-vpc
+    - name: wyndham-cloudformation-eks-workers
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-eks-workers
+          type: aws.cloudformation.Template
+          file: !file ../cloudformation/eks-workers.yaml
+          capabilities:
+          - CAPABILITY_IAM
+          - CAPABILITY_NAMED_IAM
+          inputVariables:
+            ProjectName: wyndham
+            VPCStackName: wyndham-eks-vpc
+            UserStackName: wyndham-eks-user
+            ClusterStackName: wyndham-eks-master
+            ClusterName: wyndham-master
+            NodeGroupName: wyndham
+        
+            
+    # config map used to create custom user for authentication to the EKS cluster
+    - name: wyndham-k8s-configmap
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: wyndham-aws-auth
+          type: k8s.ResourcesFile
+          file: !file ../kubernetes/aws-auth-cm.yaml
+          delimiters: "## ##"
+
+  - name: K8S
+    type: core.Directory
+
+    children:
+    # Provision K8s namespace
+    - name: wyndham-namespace
+      type: udm.Application
+      children:
+      - name: '1.0.0'
+        type: udm.DeploymentPackage
+        deployables:
+        - name: xl-demo
+          type: k8s.NamespaceSpec
+          namespaceName: 'xl-demo'

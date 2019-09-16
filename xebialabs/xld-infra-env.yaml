@@ -1,0 +1,27 @@
+# Provision AWS EKS cluster
+apiVersion: xl-deploy/v1
+kind: Infrastructure
+spec:
+- name: wyndham
+  type: core.Directory
+  children:
+  - name: aws-wyndham
+    type: aws.Cloud
+    accesskey: !value AWSAccessKey
+    accessSecret: !value AWSAccessSecret
+    children:
+    - name: eks-cloudformation
+      type: aws.cloudformation.Stack
+      region: us-east-2
+---
+apiVersion: xl-deploy/v1
+kind: Environments
+spec:
+- name: wyndham
+  type: core.Directory
+  children:
+  - name: aws-cloudformation-wyndham
+    type: udm.Environment
+    members:
+    - Infrastructure/wyndham/aws-wyndham
+    - Infrastructure/wyndham/aws-wyndham/eks-cloudformation
